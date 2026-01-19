@@ -106,15 +106,13 @@ with tab2:
             st.warning("无匹配数据 (支持 6-110mm)")
 
 # ==============================================================================
-# TAB 3: 英制键槽 (按轴径查询) - NEW!
+# TAB 3: 英制键槽 (按轴径查询) - 双单位显示版
 # ==============================================================================
 with tab3:
     st.header("英制键槽 (Imperial Keyway)")
-    st.caption("输入轴径 (inch) -> 查询键槽尺寸 (decimal inch)")
-    st.caption("数据源：基于上传的 Decimal Inch 表格")
+    st.caption("输入轴径 (inch) -> 查询键槽尺寸 (同时显示公制)")
 
     # 数据格式: (Shaft_Min, Shaft_Max, W_min, W_max, T2_min, T2_max, R_min, R_max)
-    # 注意: 范围是 Shaft > Min AND Shaft <= Max
     IMPERIAL_SHAFT_DB = [
         (0.2362, 0.3150, 0.0783, 0.0792, 0.0394, 0.0433, 0.004, 0.006),
         (0.3150, 0.3937, 0.1176, 0.1186, 0.0551, 0.0591, 0.004, 0.006),
@@ -144,21 +142,44 @@ with tab3:
     if btn_imp:
         found = False
         for row in IMPERIAL_SHAFT_DB:
-            # 逻辑: Min < Shaft <= Max
             if row[0] < imp_shaft <= row[1]:
                 found = True
                 st.divider()
                 st.subheader(f"🇺🇸 轴径 {imp_shaft:.4f}\" 键槽参数")
                 st.caption(f"匹配范围: >{row[0]} ~ ≤{row[1]} inch")
 
+                # 计算公制数值 (mm = inch * 25.4)
+                w_mm_min = row[2] * 25.4
+                w_mm_max = row[3] * 25.4
+                t2_mm_min = row[4] * 25.4
+                t2_mm_max = row[5] * 25.4
+                r_mm_min = row[6] * 25.4
+                r_mm_max = row[7] * 25.4
+
                 k1, k2, k3 = st.columns(3)
-                # 显示格式保留4位小数
-                k1.metric("键宽 (W)", f"{row[2]:.4f} ~ {row[3]:.4f}\"")
-                k2.metric("键深 (T2)", f"{row[4]:.4f} ~ {row[5]:.4f}\"")
-                k3.metric("圆角 (R)", f"{row[6]:.3f} ~ {row[7]:.3f}\"")
                 
-                # 辅助：显示对应的 mm 参考值
-                st.caption(f"参考公制: W≈{(row[2]+row[3])/2*25.4:.1f}mm | T2≈{(row[4]+row[5])/2*25.4:.1f}mm")
+                # 使用 metric 的 delta 参数显示公制，delta_color="off" 设为灰色
+                with k1:
+                    st.metric(
+                        "键宽 (W)", 
+                        f"{row[2]:.4f} ~ {row[3]:.4f}\"",
+                        f"{w_mm_min:.2f} ~ {w_mm_max:.2f} mm",
+                        delta_color="off"
+                    )
+                with k2:
+                    st.metric(
+                        "键深 (T2)", 
+                        f"{row[4]:.4f} ~ {row[5]:.4f}\"",
+                        f"{t2_mm_min:.2f} ~ {t2_mm_max:.2f} mm",
+                        delta_color="off"
+                    )
+                with k3:
+                    st.metric(
+                        "圆角 (R)", 
+                        f"{row[6]:.3f} ~ {row[7]:.3f}\"",
+                        f"{r_mm_min:.2f} ~ {r_mm_max:.2f} mm",
+                        delta_color="off"
+                    )
                 break
         
         if not found:
