@@ -2,26 +2,22 @@ import streamlit as st
 import re
 
 # 设置页面配置
-st.set_page_config(page_title="全能工程查询助手 v2.2", page_icon="🛠️", layout="wide")
+st.set_page_config(page_title="全能工程查询助手 v2.3", page_icon="🛠️", layout="wide")
 
 st.title("🛠️ 全能工程查询助手")
-st.markdown("集成：**智能查询** | **ISO 286** | **公制键槽** | **英制键槽** | **单位转换**")
+st.markdown("集成：**智能键槽公差查询** | **ISO 286 公差查询**")
 
-# 创建 5 个选项卡
-tab_smart, tab1, tab2, tab3, tab4 = st.tabs([
-    "🔍 键槽公差查询",  # 名称已修改
-    "📐 ISO 286 公差", 
-    "🗝️ 公制键槽 (Metric)", 
-    "🇺🇸 英制键槽 (Imperial)", 
-    "🔄 键槽单位转换"
+# 只创建 2 个选项卡
+tab1, tab2 = st.tabs([
+    "🔍 键槽公差查询", 
+    "📐 ISO 286 公差"
 ])
 
 # ==============================================================================
-# 全局数据库 (移至顶层，以便所有Tab共用)
+# 全局数据库 (保留用于智能查询的后台匹配)
 # ==============================================================================
 
 # 1. 公制键槽数据
-# [Min_D, Max_D, Spec, W, W_tol, T2_min, T2_max, R_min, R_max]
 METRIC_DB = [
     (6, 8, "2x2", 2, 0.0125, 1.0, 1.1, 0.08, 0.16),
     (8, 10, "3x3", 3, 0.0125, 1.4, 1.5, 0.08, 0.16),
@@ -40,7 +36,7 @@ METRIC_DB = [
     (95, 110, "28x16", 28, 0.026, 6.4, 6.6, 0.40, 0.60)
 ]
 
-# 2. 英制键槽数据 (Shaft_Min, Shaft_Max, W_min, W_max, T2_min, T2_max, R_min, R_max)
+# 2. 英制键槽数据
 IMPERIAL_SHAFT_DB = [
     (0.2362, 0.3150, 0.0783, 0.0792, 0.0394, 0.0433, 0.004, 0.006),
     (0.3150, 0.3937, 0.1176, 0.1186, 0.0551, 0.0591, 0.004, 0.006),
@@ -60,16 +56,16 @@ IMPERIAL_SHAFT_DB = [
 ]
 
 # ==============================================================================
-# TAB 1: 键槽公差查询 (核心优化)
+# TAB 1: 键槽公差查询 (保留完整功能)
 # ==============================================================================
-with tab_smart:
-    st.header("🔍 键槽公差查询") # 名称已更改
+with tab1:
+    st.header("🔍 键槽公差查询")
     st.caption("输入示例: **8JS9**, **10P9** (公制) 或 **0.25**, **1/4** (英制)")
 
     unit_mode = st.radio("选择单位体系", ["公制 (Metric)", "英制 (Imperial)"], horizontal=True)
     col_input, col_btn = st.columns([3, 1])
 
-    # --- 公制逻辑 (保持不变) ---
+    # --- 公制逻辑 ---
     if unit_mode == "公制 (Metric)":
         with col_input:
             user_input = st.text_input("输入规格代码 (如 8JS9, 10P9)", value="8JS9")
@@ -134,13 +130,12 @@ with tab_smart:
             if not found_spec:
                 st.info("未找到标准键规格")
     
-    # --- 英制逻辑 (升级版：显示公制转换与详细尺寸) ---
+    # --- 英制逻辑 ---
     else:
         with col_input:
             user_input_imp = st.text_input("输入英制键宽 (如 0.25 或 1/4)", value="0.25")
         
         try:
-            # 1. 基础解析
             if "/" in user_input_imp:
                 n, d = user_input_imp.split("/")
                 val_imp = float(n)/float(d)
@@ -152,42 +147,26 @@ with tab_smart:
             st.divider()
             st.subheader("🇺🇸 英制键槽参数")
             
-            # 2. 显示键宽 (带公制转换)
-            ic1, ic2 = st.columns(2)
-            # ANSI B17.1 Class 2 Tolerance roughly +0.002"
+            # ANSI B17.1 Class 2 Tolerance
             tol_imp = 0.002
             tol_mm = tol_imp * 25.4
             
-            ic1.metric("名义尺寸 (Nominal)", 
-                       f"{val_imp:.4f}\"", 
-                       f"{val_mm:.3f} mm", delta_color="off")
-            
-            ic2.metric("键槽宽极限 (Max)", 
-                       f"{(val_imp + tol_imp):.4f}\"", 
-                       f"+{tol_imp}\" (+{tol_mm:.3f} mm)")
+            ic1, ic2 = st.columns(2)
+            ic1.metric("名义尺寸 (Nominal)", f"{val_imp:.4f}\"", f"{val_mm:.3f} mm", delta_color="off")
+            ic2.metric("键槽宽极限 (Max)", f"{(val_imp + tol_imp):.4f}\"", f"+{tol_imp}\" (+{tol_mm:.3f} mm)")
 
-            # 3. 查找并显示关联的详细尺寸 (深度、轴径等)
             st.markdown("---")
             st.caption(f"匹配标准数据 (Based on ANSI B17.1 for Key Width {val_imp:.4f}\")")
             
             found_imp_spec = False
-            
-            # 遍历数据库查找匹配的键宽
-            # 数据库里的 W_min 和 W_max 应该包含用户的输入值
             for row in IMPERIAL_SHAFT_DB:
-                # row[2] 是 W_min, row[3] 是 W_max. 
-                # 我们允许一点点浮点误差，或者检查输入值是否在范围内
                 mid_width = (row[2] + row[3]) / 2
-                if abs(val_imp - mid_width) < 0.01: # 宽松匹配，只要接近标准值即可
+                if abs(val_imp - mid_width) < 0.01:
                     found_imp_spec = True
-                    
-                    # 准备数据
                     shaft_range_str = f"{row[0]:.4f}\" ~ {row[1]:.4f}\""
                     shaft_range_mm = f"{row[0]*25.4:.1f} ~ {row[1]*25.4:.1f} mm"
-                    
                     depth_imp_str = f"{row[4]:.4f}\" ~ {row[5]:.4f}\""
                     depth_mm_str = f"{row[4]*25.4:.2f} ~ {row[5]*25.4:.2f} mm"
-                    
                     radius_imp_str = f"{row[6]:.3f}\" ~ {row[7]:.3f}\""
                     radius_mm_str = f"{row[6]*25.4:.2f} ~ {row[7]*25.4:.2f} mm"
 
@@ -196,7 +175,6 @@ with tab_smart:
                         k1, k2 = st.columns(2)
                         k1.write(f"**键槽深度 (Hub Depth):**")
                         k1.code(f"{depth_imp_str}\n>> {depth_mm_str}")
-                        
                         k2.write(f"**圆角半径 (Radius):**")
                         k2.code(f"{radius_imp_str}\n>> {radius_mm_str}")
             
@@ -207,9 +185,9 @@ with tab_smart:
              st.error("输入格式有误，请输入小数(0.25)或分数(1/4)。")
 
 # ==============================================================================
-# TAB 2: ISO 286 公差查询 (保持不变)
+# TAB 2: ISO 286 公差查询
 # ==============================================================================
-with tab1:
+with tab2:
     st.header("ISO 286 公差查询")
     st.caption("支持公差带：H7, H8, F7, F8, G7, K7, P7, h7, h8, h12, h14, g8")
 
@@ -263,48 +241,3 @@ with tab1:
                 st.info(f"偏差: {u*1000:+.0f}/{l*1000:+.0f} μm" if abs(u)<1 else f"{u:+.3f}/{l:+.3f} mm")
         else:
             st.error("未找到数据或尺寸超出范围")
-
-# ==============================================================================
-# TAB 3: 公制键槽
-# ==============================================================================
-with tab2:
-    st.header("公制键槽 (Metric Keyway)")
-    m_shaft = st.number_input("输入轴直径 (mm)", 6.0, 110.0, 50.0, 1.0)
-    if st.button("查询公制键槽"):
-        for row in METRIC_DB:
-            if row[0] < m_shaft <= row[1]:
-                st.success(f"✅ 匹配规格: {row[2]} (轴 Ø{m_shaft})")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("键宽 (W)", f"{row[3]} ±{row[4]}")
-                c2.metric("键深 (T2)", f"{row[5]}~{row[6]}")
-                c3.metric("圆角 (R)", f"{row[7]}~{row[8]}")
-                break
-        else: st.warning("无匹配数据")
-
-# ==============================================================================
-# TAB 4: 英制键槽 (列表查询模式)
-# ==============================================================================
-with tab3:
-    st.header("英制键槽 (Shaft Lookup)")
-    c_imp1, c_imp2 = st.columns([2, 1])
-    with c_imp1: imp_shaft = st.number_input("输入英制轴径 (inch)", 0.2362, 4.3307, 1.000, 0.001, format="%.4f")
-    with c_imp2: 
-        st.write(""); st.write("")
-        if st.button("查询英制键槽", type="primary"):
-            found = False
-            for row in IMPERIAL_SHAFT_DB:
-                if row[0] < imp_shaft <= row[1]:
-                    found = True; st.divider(); st.subheader(f"🇺🇸 轴径 {imp_shaft:.4f}\"")
-                    k1, k2 = st.columns(2)
-                    k1.metric("键宽 (W)", f"{row[2]:.4f}~{row[3]:.4f}\"", f"{row[2]*25.4:.2f}mm")
-                    k2.metric("键深 (T2)", f"{row[4]:.4f}~{row[5]:.4f}\"", f"{row[4]*25.4:.2f}mm")
-                    break
-            if not found: st.error("无匹配数据")
-
-# ==============================================================================
-# TAB 5: 单位转换
-# ==============================================================================
-with tab4:
-    st.header("单位转换")
-    inch_sel = st.selectbox("选择英制", ["1/4\"", "1/2\"", "3/4\"", "1\""])
-    if st.button("转换"): st.success("转换功能示例")
