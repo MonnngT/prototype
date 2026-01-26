@@ -2,7 +2,7 @@ import streamlit as st
 import re
 
 # 设置页面配置
-st.set_page_config(page_title="全能工程查询助手 v2.6", page_icon="🛠️", layout="wide")
+st.set_page_config(page_title="全能工程查询助手 v2.7", page_icon="🛠️", layout="wide")
 
 st.title("🛠️ 全能工程查询助手")
 st.markdown("集成：**智能键槽公差查询** | **ISO 286 公差查询**")
@@ -18,7 +18,6 @@ tab1, tab2 = st.tabs([
 # ==============================================================================
 
 # 1. 公制键槽数据 (DIN 6885 / ISO 773)
-# [Min_Shaft, Max_Shaft, Spec, W, W_tol, Hub_Depth_Min, Hub_Depth_Max, R_min, R_max]
 METRIC_DB = [
     (6, 8, "2x2", 2, 0.0125, 1.0, 1.1, 0.08, 0.16),
     (8, 10, "3x3", 3, 0.0125, 1.4, 1.5, 0.08, 0.16),
@@ -38,7 +37,6 @@ METRIC_DB = [
 ]
 
 # 2. 英制键槽数据 (ANSI B17.1 Square Keys - Class 2 Fit)
-# [Shaft_Min, Shaft_Max, Key_Width(Nominal), Hub_Depth_Min(Nominal)]
 IMPERIAL_DB_ANSI = [
     (0.3125, 0.4375, 0.09375, 0.0469), # 5/16 - 7/16 -> 3/32 Key
     (0.4375, 0.5625, 0.12500, 0.0625), # 7/16 - 9/16 -> 1/8 Key
@@ -126,7 +124,6 @@ with tab1:
                         kc1, kc2, kc3 = st.columns(3)
                         kc1.write(f"**键宽:** {row[3]} mm")
                         kc2.write(f"**键高:** {row[2].split('x')[1]} mm")
-                        # 修改名称：轮毂槽深 -> 键深
                         kc3.write(f"**键深 (Key Depth):** {row[5]}~{row[6]} mm")
             if not found_spec:
                 st.info("未找到标准键规格")
@@ -150,25 +147,28 @@ with tab1:
             tol_imp_upper = 0.0020
             if val_imp > 0.75: tol_imp_upper = 0.0030
             
-            tol_mm_upper = tol_imp_upper * 25.4 # 转换公差值为mm
+            tol_mm_upper = tol_imp_upper * 25.4
+            
+            # 计算最大/最小极限的绝对公制值
+            val_mm_max = (val_imp + tol_imp_upper) * 25.4
+            val_mm_min = val_imp * 25.4 # 下偏差为0
 
             st.divider()
             
-            # 1. 显示三栏
+            # 1. 显示三栏 (Value中增加 mm 显示)
             ic1, ic2, ic3 = st.columns(3)
             
             ic1.metric("英制键宽 (Nominal)", 
                        f"{val_imp:.4f}\"", 
                        f"{val_mm_nom:.3f} mm", delta_color="off")
             
-            # 显示 mm
             ic2.metric("最大极限 (Max)", 
-                       f"{(val_imp + tol_imp_upper):.4f}\"", 
-                       f"+{tol_imp_upper}\" (+{tol_mm_upper:.3f} mm)")
+                       f"{(val_imp + tol_imp_upper):.4f}\" ({val_mm_max:.3f} mm)", 
+                       f"+{tol_imp_upper}\"")
 
             ic3.metric("最小极限 (Min)", 
-                       f"{val_imp:.4f}\"", 
-                       f"-0.0000\" (0.000 mm)")
+                       f"{val_imp:.4f}\" ({val_mm_min:.3f} mm)", 
+                       f"-0.0000\"")
 
             # 2. 关联标准尺寸
             st.subheader("📏 关联标准尺寸 (ANSI B17.1)")
@@ -180,16 +180,13 @@ with tab1:
                     found_imp_spec = True
                     shaft_range_str = f"{row[0]:.4f}\" ~ {row[1]:.4f}\""
                     
-                    # Hub Depth Logic (Range Calculation)
                     depth_min = row[3]
-                    # ANSI B17.1: Tolerance +0.010 for shafts up to 1-3/4", +0.015 for larger
                     depth_tol = 0.010
                     if row[1] > 1.75: depth_tol = 0.015
                     depth_max = depth_min + depth_tol
 
-                    # Conversions
                     w_mm = row[2] * 25.4
-                    h_mm = row[2] * 25.4 # Square key H=W
+                    h_mm = row[2] * 25.4 
                     d_mm_min = depth_min * 25.4
                     d_mm_max = depth_max * 25.4
 
@@ -198,7 +195,6 @@ with tab1:
                         kc1.write(f"**键宽 (Width):** {row[2]:.4f}\" ({w_mm:.3f} mm)")
                         kc2.write(f"**键高 (Height):** {row[2]:.4f}\" ({h_mm:.3f} mm)") 
                         
-                        # 修改名称：轮毂槽深 -> 键深，并显示为范围
                         kc3.write(f"**键深 (Key Depth):**")
                         kc3.code(f"{depth_min:.4f}\" ~ {depth_max:.4f}\"\n({d_mm_min:.2f} ~ {d_mm_max:.2f} mm)")
                     break
