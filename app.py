@@ -2,22 +2,23 @@ import streamlit as st
 import re
 
 # 设置页面配置
-st.set_page_config(page_title="全能工程查询助手 v2.3", page_icon="🛠️", layout="wide")
+st.set_page_config(page_title="全能工程查询助手 v2.4", page_icon="🛠️", layout="wide")
 
 st.title("🛠️ 全能工程查询助手")
 st.markdown("集成：**智能键槽公差查询** | **ISO 286 公差查询**")
 
-# 只创建 2 个选项卡
+# 创建 2 个选项卡
 tab1, tab2 = st.tabs([
     "🔍 键槽公差查询", 
     "📐 ISO 286 公差"
 ])
 
 # ==============================================================================
-# 全局数据库 (保留用于智能查询的后台匹配)
+# 全局数据库
 # ==============================================================================
 
-# 1. 公制键槽数据
+# 1. 公制键槽数据 (DIN 6885 / ISO 773)
+# [Min_Shaft, Max_Shaft, Spec, W, W_tol, Hub_Depth_Min, Hub_Depth_Max, R_min, R_max]
 METRIC_DB = [
     (6, 8, "2x2", 2, 0.0125, 1.0, 1.1, 0.08, 0.16),
     (8, 10, "3x3", 3, 0.0125, 1.4, 1.5, 0.08, 0.16),
@@ -36,36 +37,36 @@ METRIC_DB = [
     (95, 110, "28x16", 28, 0.026, 6.4, 6.6, 0.40, 0.60)
 ]
 
-# 2. 英制键槽数据
-IMPERIAL_SHAFT_DB = [
-    (0.2362, 0.3150, 0.0783, 0.0792, 0.0394, 0.0433, 0.004, 0.006),
-    (0.3150, 0.3937, 0.1176, 0.1186, 0.0551, 0.0591, 0.004, 0.006),
-    (0.3937, 0.4724, 0.1569, 0.1581, 0.0709, 0.0748, 0.004, 0.006),
-    (0.4724, 0.6693, 0.1963, 0.1974, 0.0906, 0.0945, 0.007, 0.009),
-    (0.6693, 0.8661, 0.2357, 0.2368, 0.1102, 0.1142, 0.007, 0.009),
-    (0.8661, 1.1811, 0.3143, 0.3157, 0.1299, 0.1378, 0.007, 0.009),
-    (1.1811, 1.4961, 0.3930, 0.3944, 0.1299, 0.1378, 0.010, 0.015),
-    (1.4961, 1.7323, 0.4716, 0.4733, 0.1299, 0.1378, 0.010, 0.015),
-    (1.7323, 1.9685, 0.5503, 0.5520, 0.1496, 0.1575, 0.010, 0.015),
-    (1.9685, 2.2835, 0.6291, 0.6308, 0.1693, 0.1772, 0.010, 0.015),
-    (2.2835, 2.5591, 0.7078, 0.7095, 0.1732, 0.1811, 0.010, 0.015),
-    (2.5591, 2.9528, 0.7864, 0.7884, 0.1929, 0.2008, 0.016, 0.023),
-    (2.9528, 3.3465, 0.8651, 0.8672, 0.2126, 0.2205, 0.016, 0.023),
-    (3.3465, 3.7402, 0.9832, 0.9853, 0.2126, 0.2205, 0.016, 0.023),
-    (3.7402, 4.3307, 1.1013, 1.1034, 0.2520, 0.2598, 0.016, 0.023)
+# 2. 英制键槽数据 (ANSI B17.1 Square Keys - Class 2 Fit)
+# [Shaft_Min, Shaft_Max, Key_Width(Nominal), Hub_Depth_Nominal(T/2)]
+# 数据来源：ANSI B17.1 Table 1 (Standard Square Keys)
+IMPERIAL_DB_ANSI = [
+    (0.3125, 0.4375, 0.09375, 0.0469), # 5/16 - 7/16 -> 3/32 Key
+    (0.4375, 0.5625, 0.12500, 0.0625), # 7/16 - 9/16 -> 1/8 Key
+    (0.5625, 0.8750, 0.18750, 0.0938), # 9/16 - 7/8  -> 3/16 Key
+    (0.8750, 1.2500, 0.25000, 0.1250), # 7/8 - 1-1/4 -> 1/4 Key
+    (1.2500, 1.3750, 0.31250, 0.1563), # 1-1/4 - 1-3/8 -> 5/16 Key
+    (1.3750, 1.7500, 0.37500, 0.1875), # 1-3/8 - 1-3/4 -> 3/8 Key
+    (1.7500, 2.2500, 0.50000, 0.2500), # 1-3/4 - 2-1/4 -> 1/2 Key
+    (2.2500, 2.7500, 0.62500, 0.3125), # 2-1/4 - 2-3/4 -> 5/8 Key
+    (2.7500, 3.2500, 0.75000, 0.3750), # 2-3/4 - 3-1/4 -> 3/4 Key
+    (3.2500, 3.7500, 0.87500, 0.4375), # 3-1/4 - 3-3/4 -> 7/8 Key
+    (3.7500, 4.5000, 1.00000, 0.5000), # 3-3/4 - 4-1/2 -> 1 Key
+    (4.5000, 5.5000, 1.25000, 0.6250), # 4-1/2 - 5-1/2 -> 1-1/4 Key
+    (5.5000, 6.5000, 1.50000, 0.7500), # 5-1/2 - 6-1/2 -> 1-1/2 Key
 ]
 
 # ==============================================================================
-# TAB 1: 键槽公差查询 (保留完整功能)
+# TAB 1: 键槽公差查询
 # ==============================================================================
 with tab1:
     st.header("🔍 键槽公差查询")
-    st.caption("输入示例: **8JS9**, **10P9** (公制) 或 **0.25**, **1/4** (英制)")
+    st.caption("输入示例: **8JS9** (公制) 或 **0.25**, **1/4** (英制)")
 
     unit_mode = st.radio("选择单位体系", ["公制 (Metric)", "英制 (Imperial)"], horizontal=True)
     col_input, col_btn = st.columns([3, 1])
 
-    # --- 公制逻辑 ---
+    # --- 公制逻辑 (保持不变) ---
     if unit_mode == "公制 (Metric)":
         with col_input:
             user_input = st.text_input("输入规格代码 (如 8JS9, 10P9)", value="8JS9")
@@ -111,6 +112,7 @@ with tab1:
                 st.warning(f"暂不支持公差 {tol_class} 的自动计算。")
                 is_valid_tol = False
 
+            # 显示结果 - 界面 A
             c1, c2, c3 = st.columns(3)
             c1.metric(f"键宽 ({size_nom} {tol_class})", f"{size_nom:.2f} mm")
             if is_valid_tol:
@@ -130,56 +132,66 @@ with tab1:
             if not found_spec:
                 st.info("未找到标准键规格")
     
-    # --- 英制逻辑 ---
+    # --- 英制逻辑 (界面优化 + 数据修正) ---
     else:
         with col_input:
             user_input_imp = st.text_input("输入英制键宽 (如 0.25 或 1/4)", value="0.25")
         
         try:
+            # 解析输入
             if "/" in user_input_imp:
                 n, d = user_input_imp.split("/")
                 val_imp = float(n)/float(d)
             else:
                 val_imp = float(user_input_imp)
             
-            val_mm = val_imp * 25.4
+            # ANSI B17.1 Class 2 Fit Tolerance for Keyway Width
+            # Usually +0.002 / -0.000 for sizes up to 3/4"
+            # +0.003 / -0.000 for larger sizes (Simplified logic here)
+            tol_imp_upper = 0.0020
+            if val_imp > 0.75: tol_imp_upper = 0.0030
             
             st.divider()
-            st.subheader("🇺🇸 英制键槽参数")
             
-            # ANSI B17.1 Class 2 Tolerance
-            tol_imp = 0.002
-            tol_mm = tol_imp * 25.4
+            # 1. 显示三栏 Metric (模仿公制界面)
+            ic1, ic2, ic3 = st.columns(3)
             
-            ic1, ic2 = st.columns(2)
-            ic1.metric("名义尺寸 (Nominal)", f"{val_imp:.4f}\"", f"{val_mm:.3f} mm", delta_color="off")
-            ic2.metric("键槽宽极限 (Max)", f"{(val_imp + tol_imp):.4f}\"", f"+{tol_imp}\" (+{tol_mm:.3f} mm)")
+            ic1.metric("英制键宽 (Nominal)", 
+                       f"{val_imp:.4f}\"", 
+                       f"{(val_imp * 25.4):.3f} mm", delta_color="off")
+            
+            ic2.metric("最大极限 (Max)", 
+                       f"{(val_imp + tol_imp_upper):.4f}\"", 
+                       f"+{tol_imp_upper}\"")
 
-            st.markdown("---")
-            st.caption(f"匹配标准数据 (Based on ANSI B17.1 for Key Width {val_imp:.4f}\")")
+            ic3.metric("最小极限 (Min)", 
+                       f"{val_imp:.4f}\"", 
+                       "-0.0000\"") # Class 2 下限通常是 0
+
+            # 2. 关联标准尺寸 (模仿公制扩展栏)
+            st.subheader("📏 关联标准尺寸 (ANSI B17.1)")
             
             found_imp_spec = False
-            for row in IMPERIAL_SHAFT_DB:
-                mid_width = (row[2] + row[3]) / 2
-                if abs(val_imp - mid_width) < 0.01:
+            # 查找匹配的键宽 (允许 0.005" 的误差以匹配浮点数)
+            for row in IMPERIAL_DB_ANSI:
+                # row[2] is Key Width
+                if abs(val_imp - row[2]) < 0.005:
                     found_imp_spec = True
                     shaft_range_str = f"{row[0]:.4f}\" ~ {row[1]:.4f}\""
-                    shaft_range_mm = f"{row[0]*25.4:.1f} ~ {row[1]*25.4:.1f} mm"
-                    depth_imp_str = f"{row[4]:.4f}\" ~ {row[5]:.4f}\""
-                    depth_mm_str = f"{row[4]*25.4:.2f} ~ {row[5]*25.4:.2f} mm"
-                    radius_imp_str = f"{row[6]:.3f}\" ~ {row[7]:.3f}\""
-                    radius_mm_str = f"{row[6]*25.4:.2f} ~ {row[7]*25.4:.2f} mm"
+                    # Hub Depth Tolerance is approx +0.010/-0.000 depending on size, simplified here to nominal
+                    depth_nom = row[3]
+                    
+                    with st.expander(f"匹配规格: Square Key (适用轴径 {shaft_range_str})", expanded=True):
+                        kc1, kc2, kc3 = st.columns(3)
+                        kc1.write(f"**键宽 (Width):** {row[2]:.4f}\"")
+                        # Square key: Height = Width
+                        kc2.write(f"**键高 (Height):** {row[2]:.4f}\"") 
+                        # Depth usually measured from theoretical hole, approx W/2
+                        kc3.write(f"**轮毂槽深 (Hub Depth):** ≈{depth_nom:.4f}\" (+Tol)")
+                    break # 找到一个就退出，避免重复
 
-                    with st.container():
-                        st.info(f"📍 适用轴径: {shaft_range_str} ({shaft_range_mm})")
-                        k1, k2 = st.columns(2)
-                        k1.write(f"**键槽深度 (Hub Depth):**")
-                        k1.code(f"{depth_imp_str}\n>> {depth_mm_str}")
-                        k2.write(f"**圆角半径 (Radius):**")
-                        k2.code(f"{radius_imp_str}\n>> {radius_mm_str}")
-            
             if not found_imp_spec:
-                st.warning("⚠️ 注意：输入的尺寸不是标准ANSI键宽，未找到关联的深度/轴径数据。")
+                st.warning("⚠️ 输入的尺寸不是 ANSI B17.1 标准方键宽度 (如 1/8, 1/4, 3/8...)，未找到关联轴径数据。")
 
         except Exception as e:
              st.error("输入格式有误，请输入小数(0.25)或分数(1/4)。")
